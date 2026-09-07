@@ -1,0 +1,11 @@
+# Next.js standalone output leaves static assets outside the server bundle.
+# They have to be copied in or every page loads without CSS.
+[phases.build]
+cmds = [
+  "npm run build",
+  "cp -r public .next/standalone/public",
+  "cp -r .next/static .next/standalone/.next/static"
+]
+
+[start]
+cmd = "node .next/standalone/server.js"
