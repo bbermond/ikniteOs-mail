@@ -30,7 +30,9 @@ cp .env.example .env.local   # fill in the values
 npm run dev                  # http://localhost:3000
 ```
 
-`npm run build && npm start` for a production build. `npm run typecheck` for types.
+`npm run build && npm start` for a production build. The build's `postbuild` hook copies
+`public` and `.next/static` into the standalone bundle, and `npm start` runs that bundle.
+`npm run typecheck` for types.
 
 ## Environment
 
@@ -40,19 +42,48 @@ npm run dev                  # http://localhost:3000
 | `UPLOAD_DIR` | yes in production | Must be a persistent volume. Ephemeral storage means every deploy breaks every signature already sent |
 | `GHL_API_TOKEN` | no | GoHighLevel Private Integration token |
 | `GHL_LOCATION_ID` | no | GoHighLevel location that receives leads |
+| `HOSTNAME` | Railway | Set to `0.0.0.0` so the standalone server binds every interface inside the container |
 
 Without the GHL pair the app still works. Leads are appended to
 `$UPLOAD_DIR/leads.ndjson` regardless, so a CRM outage never loses one.
 
 ## Deploying to Railway
 
-1. New project, deploy from this repo. Nixpacks config is committed.
-2. Add a volume mounted at `/data`.
-3. Set the four environment variables. `UPLOAD_DIR=/data/uploads`.
-4. Add the custom domain and point a CNAME at it.
+The app runs as the `ikniteos-mail` service inside the `ikniteos-com` Railway
+project, next to the marketing site, and answers on `mail.ikniteos.com`.
 
-`nixpacks.toml` copies `public` and `.next/static` into the standalone output.
-Without that step the app boots but serves no CSS.
+The service is described in `.railway/railway.ts` (Railway Infrastructure as
+Code): builder, start command, healthcheck, restart policy, the runtime
+variables and the `/data` volume mount. Railpack builds it with `npm ci` and
+`npm run build`, whose `postbuild` hook copies static assets into the
+standalone bundle, and `npm start` runs that bundle.
+
+To ship a new version from this folder:
+
+```bash
+railway link -p ikniteos-com -e production -s ikniteos-mail
+railway up --ci
+```
+
+`railway up` uploads the working tree (respecting `.gitignore`) and swaps the
+new build in once the healthcheck on `/` passes. To change service settings,
+edit `.railway/railway.ts`, then:
+
+```bash
+railway config plan
+railway config apply
+```
+
+Do not apply a plan that lists anything to destroy unless that is the intent.
+To move to GitHub autodeploys later, push this repo and run
+`railway service source connect --repo <owner>/<repo> --branch main --service ikniteos-mail`.
+
+Setting up from scratch elsewhere:
+
+1. Create an empty service, link this folder to it, and run `railway config apply`.
+2. Add `GHL_API_TOKEN` and `GHL_LOCATION_ID` as sealed variables in the dashboard.
+3. Add the custom domain and point a CNAME at the target Railway shows.
+4. Run `railway up --ci`.
 
 ## Adding a template
 

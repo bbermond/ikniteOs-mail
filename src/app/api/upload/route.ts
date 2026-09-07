@@ -3,7 +3,20 @@ import { MAX_UPLOAD_BYTES, extensionFor, saveImage } from '@/lib/storage';
 
 export const runtime = 'nodejs';
 
-const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? '';
+const SITE = (process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/$/, '');
+
+/**
+ * Absolute origin for image URLs. The configured site URL wins, because those
+ * URLs end up in other people's inboxes. Behind a proxy the request URL carries
+ * the bind address rather than the public host, so fall back to the forwarded
+ * headers before trusting it.
+ */
+function publicOrigin(req: Request): string {
+  if (SITE) return SITE;
+  const proto = req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() || 'http';
+  const host = req.headers.get('x-forwarded-host')?.split(',')[0]?.trim() || req.headers.get('host');
+  return host ? `${proto}://${host}` : new URL(req.url).origin;
+}
 
 export async function POST(req: Request) {
   try {
@@ -26,8 +39,7 @@ export async function POST(req: Request) {
     }
     const bytes = Buffer.from(await file.arrayBuffer());
     const id = await saveImage(bytes, file.type);
-    const origin = SITE || new URL(req.url).origin;
-    return NextResponse.json({ url: `${origin.replace(/\/$/, '')}/api/img/${id}`, id });
+    return NextResponse.json({ url: `${publicOrigin(req)}/api/img/${id}`, id });
   } catch (err) {
     console.error('[upload]', err);
     return NextResponse.json({ error: 'Upload failed. Try again.' }, { status: 500 });

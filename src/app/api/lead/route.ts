@@ -11,6 +11,10 @@ const LOG_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), '.uploads');
 const hits = new Map<string, { n: number; until: number }>();
 function throttled(ip: string): boolean {
   const now = Date.now();
+  // Drop expired entries now and then so the map cannot grow without bound.
+  if (hits.size > 2000) {
+    for (const [key, rec] of hits) if (now > rec.until) hits.delete(key);
+  }
   const rec = hits.get(ip);
   if (!rec || now > rec.until) {
     hits.set(ip, { n: 1, until: now + 60_000 });
